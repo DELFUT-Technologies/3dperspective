@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3点透視図法：視点（SP）の立体展開シミュレーター</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif;
+      background-color: #f4f6f9;
+      color: #222;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    #canvas-container {
+      flex: 1;
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    /* コントロールパネル（左上） */
+    .panel-left {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(6px);
+      border: 1px solid #d0d7de;
+      border-radius: 10px;
+      padding: 14px 16px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+      max-width: 300px;
+      z-index: 10;
+      font-size: 13px;
+    }
+    .panel-left h1 {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: #111;
+    }
+    .panel-left p.desc {
+      font-size: 11.5px;
+      line-height: 1.5;
+      color: #555;
+      margin-bottom: 10px;
+    }
+    .check-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      border-top: 1px solid #eee;
+      padding-top: 10px;
+    }
+    .check-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      user-select: none;
+      font-size: 12px;
+    }
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    /* 視点切り替え（右上） */
+    .panel-right {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      z-index: 10;
+    }
+    .btn {
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #334155;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+      transition: all 0.15s ease;
+    }
+    .btn:hover {
+      background: #f1f5f9;
+      border-color: #94a3b8;
+    }
+    .btn.primary {
+      background: #2563eb;
+      color: #fff;
+      border-color: #1d4ed8;
+    }
+    .btn.primary:hover {
+      background: #1d4ed8;
+    }
+    /* 下部スライダーバー */
+    .panel-bottom {
+      position: absolute;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255, 255, 255, 0.96);
+      border: 1px solid #d0d7de;
+      border-radius: 12px;
+      padding: 12px 20px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      width: min(92vw, 540px);
+      z-index: 10;
+    }
+    .slider-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .slider-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      font-weight: 600;
+      color: #475569;
+    }
+    input[type="range"] {
+      width: 100%;
+      cursor: pointer;
+      accent-color: #2563eb;
+    }
+    /* 3D空間上のラベル */
+    .label-3d {
+      position: absolute;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      white-space: nowrap;
+      text-shadow: 0 0 4px #fff, 0 0 4px #fff, 0 0 4px #fff;
+    }
+  </style>
+  <!-- Three.js & OrbitControls CDN -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="canvas-container">
+    <!-- 左上パネル -->
+    <div class="panel-left">
+      <h1>3点透視：SP（視点）の立体展開</h1>
+      <p class="desc">
+        手前に浮かぶ<strong>カメラ位置（SP）</strong>の3つの直交する90°の角が、画面（PP）の辺を蝶番にして紙面へ「パタン」と倒れる仕組みです。<br>
+        ※マウスドラッグで回転・ホイールで拡大縮小
+      </p>
+      <div class="check-group">
+        <label class="check-item">
+          <input type="checkbox" id="chk-bottom" checked />
+          <span class="dot" style="background:#16a34a;"></span>
+          <span>① 下の面（緑：SP / カメラ位置 90°）</span>
+        </label>
+        <label class="check-item">
+          <input type="checkbox" id="chk-left" checked />
+          <span class="dot" style="background:#2563eb;"></span>
+          <span>② 左上の面（青：90°の頂点）</span>
+        </label>
+        <label class="check-item">
+          <input type="checkbox" id="chk-right" checked />
+          <span class="dot" style="background:#2563eb;"></span>
+          <span>③ 右上の面（青：90°の頂点）</span>
+        </label>
+        <label class="check-item">
+          <input type="checkbox" id="chk-circles" checked />
+          <span class="dot" style="background:#9333ea;"></span>
+          <span>紫の補助円（タレスの円）を表示</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- 右上視点ボタン -->
+    <div class="panel-right">
+      <button class="btn" id="btn-view-3d">斜め3D視点（立体を見る）</button>
+      <button class="btn" id="btn-view-2d">正面2D作図図（資料と同じ向き）</button>
+    </div>
+
+    <!-- 下部アニメーションバー -->
+    <div class="panel-bottom">
+      <button class="btn primary" id="btn-toggle">▶ パタンと倒す</button>
+      <div class="slider-wrap">
+        <div class="slider-labels">
+          <span>0%：立体空間（3D三角錐）</span>
+          <span id="pct-text">0%</span>
+          <span>100%：紙面展開（2D作図）</span>
+        </div>
+        <input type="range" id="unfold-slider" min="0" max="1" step="0.005" value="0" />
+      </div>
+    </div>
+
+    <!-- ラベルコンテナ -->
+    <div id="labels-layer"></div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // --- 1. 基本シーン設定 ---
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xf8fafc);
+
+    const camera = new THREE.PerspectiveCamera(40, container.clientWidth / container.clientHeight, 0.1, 1000);
+    camera.position.set(14, 8, 22);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    container.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.target.set(0, 1.5, 0);
+
+    // 方眼グリッド（紙面 Z=0 を示す薄い背景）
+    const paperGeo = new THREE.PlaneGeometry(36, 36);
+    const paperMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.75,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    });
+    const paperPlane = new THREE.Mesh(paperGeo, paperMat);
+    paperPlane.position.set(0, 2, -0.02);
+    scene.add(paperPlane);
+
+    const gridHelper = new THREE.GridHelper(36, 36, 0xe2e8f0, 0xf1f5f9);
+    gridHelper.rotation.x = Math.PI / 2;
+    gridHelper.position.set(0, 2, -0.01);
+    scene.add(gridHelper);
+
+    // --- 2. 厳密な3点透視の幾何学座標の計算 ---
+    // SP（視点）は z = +d の位置にあり、VP1, VP2, VP3 へのベクトルが互いに90度直交する座標を構築
+    // 仰角 theta = 32度（アオリ構図）、水平回転 phi = 35度
+    const f = 5.2; // 焦点距離（フレームセンターからSPまでの距離）
+    const theta = THREE.MathUtils.degToRad(32); // カメラ上向き角度
+    const phi = THREE.MathUtils.degToRad(36);   // 建物の水平回転角
+
+    // SP（3D空間上のカメラ位置）を原点 (0, 0, f) とし、フレームセンターを (0, 0, 0) とする
+    const SP3D = new THREE.Vector3(0, 0, f);
+
+    // カメラ座標系における建物の3直交軸（X, Y, Z）の方向ベクトル
+    // まず水平状態の直交2軸をphi回転し、さらにカメラ仰角theta分だけ下に傾ける（＝空間が相対的に傾く）
+    const v1 = new THREE.Vector3(-Math.cos(phi), 0, -Math.sin(phi));
+    const v2 = new THREE.Vector3(Math.sin(phi), 0, -Math.cos(phi));
+    const v3 = new THREE.Vector3(0, 1, 0);
+
+    // X軸周りに -theta 回転させてアオリ（上向き視線）にする
+    const rotX = new THREE.Matrix4().makeRotationX(-theta);
+    v1.applyMatrix4(rotX);
+    v2.applyMatrix4(rotX);
+    v3.applyMatrix4(rotX);
+
+    // SP3D から各方向ベクトルを伸ばし、画面平面 (z = 0) と交差する点が VP1, VP2, VP3
+    function intersectZ0(origin, dir) {
+      const t = -origin.z / dir.z;
+      return origin.clone().add(dir.clone().multiplyScalar(t));
+    }
+
+    const VP1 = intersectZ0(SP3D, v1); // 左の消失点
+    const VP2 = intersectZ0(SP3D, v2); // 右の消失点
+    const VP3 = intersectZ0(SP3D, v3); // 上の消失点（アオリの垂直消失点）
+    const FC = new THREE.Vector3(0, 0, 0); // フレームセンター
+
+    // 確認: (VP1 - SP3D)・(VP2 - SP3D) = 0, (VP2 - SP3D)・(VP3 - SP3D) = 0, (VP3 - SP3D)・(VP1 - SP3D) = 0
+
+    // --- 3. 固定要素（スクリーン上の三角形・フレーム・3つの紫の円） ---
+    function createLine(points, color, linewidth = 2) {
+      const geo = new THREE.BufferGeometry().setFromPoints(points);
+      const mat = new THREE.LineBasicMaterial({ color });
+      return new THREE.Line(geo, mat);
+    }
+
+    // VP1 - VP2（地平線 HL）と三角形の辺
+    scene.add(createLine([VP1, VP2], 0x4d7c0f)); // 地平線
+    scene.add(createLine([VP1, VP3], 0x64748b)); // 左斜辺
+    scene.add(createLine([VP2, VP3], 0x64748b)); // 右斜辺
+
+    // フレーム枠（赤）
+    const fw = 3.2, fh = 2.4;
+    const framePts = [
+      new THREE.Vector3(-fw, -fh, 0),
+      new THREE.Vector3(fw, -fh, 0),
+      new THREE.Vector3(fw, fh, 0),
+      new THREE.Vector3(-fw, fh, 0),
+      new THREE.Vector3(-fw, -fh, 0)
+    ];
+    scene.add(createLine(framePts, 0xdc2626));
+    // フレーム対角線
+    scene.add(createLine([new THREE.Vector3(-fw, -fh, 0), new THREE.Vector3(fw, fh, 0)], 0xfca5a5));
+    scene.add(createLine([new THREE.Vector3(fw, -fh, 0), new THREE.Vector3(-fw, fh, 0)], 0xfca5a5));
+
+    // タレスの円（3つの紫の円：各辺を直径とする円）
+    function createThalesCircle(pA, pB, color = 0x9333ea) {
+      const center = pA.clone().add(pB).multiplyScalar(0.5);
+      const radius = pA.distanceTo(pB) * 0.5;
+      const pts = [];
+      const segs = 96;
+      for (let i = 0; i <= segs; i++) {
+        const a = (i / segs) * Math.PI * 2;
+        pts.push(new THREE.Vector3(
+          center.x + Math.cos(a) * radius,
+          center.y + Math.sin(a) * radius,
+          0
+        ));
+      }
+      return createLine(pts, color);
+    }
+
+    const circlesGroup = new THREE.Group();
+    circlesGroup.add(createThalesCircle(VP1, VP2));
+    circlesGroup.add(createThalesCircle(VP1, VP3));
+    circlesGroup.add(createThalesCircle(VP2, VP3));
+    scene.add(circlesGroup);
+
+    // 頂点マーカー（球）
+    function createDot(pos, color, size = 0.16) {
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(size, 16, 16),
+        new THREE.MeshBasicMaterial({ color })
+      );
+      mesh.position.copy(pos);
+      scene.add(mesh);
+      return mesh;
+    }
+
+    createDot(VP1, 0x15803d, 0.16);
+    createDot(VP2, 0x15803d, 0.16);
+    createDot(VP3, 0x1d4ed8, 0.16);
+    createDot(FC, 0xdc2626, 0.12);
+    const sp3dMarker = createDot(SP3D, 0x111827, 0.2);
+
+    // --- 4. パタンと展開する3つの直角三角形（ヒンジ回転）の構築 ---
+    // 辺 AB を軸にして、SP3D を z=0 平面（外側方向）へ倒す関数
+    function createUnfoldingFace(pA, pB, apex3D, lineColor, fillColor, outSign) {
+      const group = new THREE.Group();
+
+      // 軸 AB の単位ベクトル
+      const axis = pB.clone().sub(pA).normalize();
+      // 軸 AB 上で apex3D から垂線を下ろした足 H
+      const ap = apex3D.clone().sub(pA);
+      const projLen = ap.dot(axis);
+      const H = pA.clone().add(axis.clone().multiplyScalar(projLen));
+
+      // H から apex3D へのベクトル（z > 0 成分を持つ）
+      const vStart = apex3D.clone().sub(H);
+      const radius = vStart.length();
+
+      // z=0 平面上で軸 AB に垂直な方向ベクトル（外向き）
+      const perp2D = new THREE.Vector3(-axis.y, axis.x, 0).multiplyScalar(outSign);
+      // 3Dでの垂直方向ベクトル
+      const vEnd = perp2D.clone().multiplyScalar(radius);
+
+      // vStart から vEnd への回転角を計算
+      const angleFull = vStart.angleTo(vEnd);
+      const rotAxis = new THREE.Vector3().crossVectors(vStart, vEnd).normalize();
+
+      // メッシュ（半透明の三角形）と輪郭線
+      const triGeo = new THREE.BufferGeometry();
+      const triMat = new THREE.MeshBasicMaterial({
+        color: fillColor,
+        transparent: true,
+        opacity: 0.22,
+        side: THREE.DoubleSide,
+        depthWrite: false
+      });
+      const triMesh = new THREE.Mesh(triGeo, triMat);
+      group.add(triMesh);
+
+      const edgeMat = new THREE.LineBasicMaterial({ color: lineColor });
+      const edgeGeo = new THREE.BufferGeometry();
+      const edgeLine = new THREE.Line(edgeGeo, edgeMat);
+      group.add(edgeLine);
+
+      // 90度マーク（直角記号）
+      const rightAngleGeo = new THREE.BufferGeometry();
+      const rightAngleLine = new THREE.Line(rightAngleGeo, edgeMat);
+      group.add(rightAngleLine);
+
+      // 展開されたSP位置のマーカー
+      const tipDot = new THREE.Mesh(
+        new THREE.SphereGeometry(0.15, 16, 16),
+        new THREE.MeshBasicMaterial({ color: lineColor })
+      );
+      group.add(tipDot);
+
+      // 軌跡の点線アーク
+      const arcPts = [];
+      for (let i = 0; i <= 40; i++) {
+        const t = i / 40;
+        const vCur = vStart.clone().applyAxisAngle(rotAxis, angleFull * t);
+        arcPts.push(H.clone().add(vCur));
+      }
+      const arcGeo = new THREE.BufferGeometry().setFromPoints(arcPts);
+      const arcMat = new THREE.LineDashedMaterial({
+        color: lineColor,
+        dashSize: 0.2,
+        gapSize: 0.15
+      });
+      const arcLine = new THREE.Line(arcGeo, arcMat);
+      arcLine.computeLineDistances();
+      group.add(arcLine);
+
+      let currentTip = apex3D.clone();
+
+      function update(t) {
+        const vCur = vStart.clone().applyAxisAngle(rotAxis, angleFull * t);
+        const P = H.clone().add(vCur);
+        currentTip.copy(P);
+
+        // 三角形面更新
+        const positions = new Float32Array([
+          pA.x, pA.y, pA.z,
+          pB.x, pB.y, pB.z,
+          P.x, P.y, P.z
+        ]);
+        triGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        triGeo.computeVertexNormals();
+
+        // 辺の線更新 (pA -> P -> pB)
+        edgeGeo.setFromPoints([pA, P, pB]);
+
+        // 直角記号（Pを頂点として pA方向と pB方向に 0.45 ずつ進んだ点）
+        const uA = pA.clone().sub(P).normalize().multiplyScalar(0.5);
+        const uB = pB.clone().sub(P).normalize().multiplyScalar(0.5);
+        const r1 = P.clone().add(uA);
+        const r2 = P.clone().add(uA).add(uB);
+        const r3 = P.clone().add(uB);
+        rightAngleGeo.setFromPoints([r1, r2, r3]);
+
+        tipDot.position.copy(P);
+      }
+
+      update(0);
+      scene.add(group);
+      return { group, update, getTip: () => currentTip };
+    }
+
+    // 3つの面を生成（外向き方向を指定）
+    // ① 下の面（VP1 - VP2 を軸に下へ倒す：緑）
+    const faceBottom = createUnfoldingFace(VP1, VP2, SP3D, 0x16a34a, 0x22c55e, -1);
+    // ② 左上の面（VP1 - VP3 を軸に左上へ倒す：青）
+    const faceLeft = createUnfoldingFace(VP1, VP3, SP3D, 0x2563eb, 0x3b82f6, 1);
+    // ③ 右上の面（VP2 - VP3 を軸に右上へ倒す：青）
+    const faceRight = createUnfoldingFace(VP2, VP3, SP3D, 0x2563eb, 0x3b82f6, -1);
+
+    // --- 5. ラベルの2D投影管理 ---
+    const labelsLayer = document.getElementById('labels-layer');
+    const labelItems = [
+      { text: 'VP1 (左消失点)', posFn: () => VP1, color: '#15803d' },
+      { text: 'VP2 (右消失点)', posFn: () => VP2, color: '#15803d' },
+      { text: 'VP3 (垂直消失点)', posFn: () => VP3, color: '#1d4ed8' },
+      { text: 'フレームセンター', posFn: () => FC, color: '#dc2626' },
+      { text: 'SP（元のカメラ位置）', posFn: () => SP3D, color: '#111827' },
+      { text: 'SP展開（カメラポジション 90°）', posFn: () => faceBottom.getTip(), color: '#15803d', checkId: 'chk-bottom' },
+      { text: 'SP展開（90°）', posFn: () => faceLeft.getTip(), color: '#1d4ed8', checkId: 'chk-left' },
+      { text: 'SP展開（90°）', posFn: () => faceRight.getTip(), color: '#1d4ed8', checkId: 'chk-right' }
+    ];
+
+    labelItems.forEach(item => {
+      const el = document.createElement('div');
+      el.className = 'label-3d';
+      el.textContent = item.text;
+      el.style.color = item.color;
+      labelsLayer.appendChild(el);
+      item.el = el;
+    });
+
+    function updateLabels() {
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      labelItems.forEach(item => {
+        if (item.checkId && !document.getElementById(item.checkId).checked) {
+          item.el.style.display = 'none';
+          return;
+        }
+        const p = item.posFn().clone().project(camera);
+        if (p.z > 1) {
+          item.el.style.display = 'none';
+        } else {
+          item.el.style.display = 'block';
+          item.el.style.left = `${(p.x * 0.5 + 0.5) * w}px`;
+          item.el.style.top = `${(-p.y * 0.5 + 0.5) * h - 14}px`;
+        }
+      });
+    }
+
+    // --- 6. UIインタラクション ---
+    const slider = document.getElementById('unfold-slider');
+    const pctText = document.getElementById('pct-text');
+    const btnToggle = document.getElementById('btn-toggle');
+
+    let progress = 0;
+    let isAnimating = false;
+    let targetProgress = 0;
+
+    function setProgress(val) {
+      progress = Math.max(0, Math.min(1, val));
+      slider.value = progress;
+      pctText.textContent = `${Math.round(progress * 100)}%`;
+      faceBottom.update(progress);
+      faceLeft.update(progress);
+      faceRight.update(progress);
+    }
+
+    slider.addEventListener('input', (e) => {
+      isAnimating = false;
+      setProgress(parseFloat(e.target.value));
+      updateButtonText();
+    });
+
+    function updateButtonText() {
+      btnToggle.textContent = progress >= 0.99 ? '◀ 立体に戻す' : '▶ パタンと倒す';
+    }
+
+    btnToggle.addEventListener('click', () => {
+      targetProgress = progress < 0.5 ? 1 : 0;
+      isAnimating = true;
+    });
+
+    // チェックボックス連動
+    document.getElementById('chk-bottom').addEventListener('change', (e) => {
+      faceBottom.group.visible = e.target.checked;
+    });
+    document.getElementById('chk-left').addEventListener('change', (e) => {
+      faceLeft.group.visible = e.target.checked;
+    });
+    document.getElementById('chk-right').addEventListener('change', (e) => {
+      faceRight.group.visible = e.target.checked;
+    });
+    document.getElementById('chk-circles').addEventListener('change', (e) => {
+      circlesGroup.visible = e.target.checked;
+    });
+
+    // 視点プリセット
+    document.getElementById('btn-view-3d').addEventListener('click', () => {
+      camera.position.set(14, 8, 22);
+      controls.target.set(0, 1.5, 0);
+    });
+    document.getElementById('btn-view-2d').addEventListener('click', () => {
+      camera.position.set(0, 2.5, 28);
+      controls.target.set(0, 2.5, 0);
+    });
+
+    // リサイズ対応
+    window.addEventListener('resize', () => {
+      camera.aspect = container.clientWidth / container.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(container.clientWidth, container.clientHeight);
+    });
+
+    // --- 7. メインループ ---
+    function animate() {
+      requestAnimationFrame(animate);
+
+      if (isAnimating) {
+        const diff = targetProgress - progress;
+        if (Math.abs(diff) < 0.005) {
+          setProgress(targetProgress);
+          isAnimating = false;
+          updateButtonText();
+        } else {
+          setProgress(progress + diff * 0.08);
+        }
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+      updateLabels();
+    }
+
+    animate();
+  </script>
+</body>
+</html>
